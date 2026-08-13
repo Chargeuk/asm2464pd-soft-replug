@@ -1,0 +1,10 @@
+[Unit]
+Description=Re-check the USB enclosure link hourly
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1h
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

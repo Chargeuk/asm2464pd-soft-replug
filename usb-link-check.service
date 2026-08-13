@@ -1,0 +1,13 @@
+[Unit]
+Description=Check the USB enclosure trained a Gen 2x2 link
+After=multi-user.target
+Wants=usb-link-check.timer
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/usb-link-check.sh
+# degraded link exits 1 by design - do not paint the unit red for it
+SuccessExitStatus=0 1
+
+[Install]
+WantedBy=multi-user.target
