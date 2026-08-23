@@ -1,0 +1,22 @@
+# OWC Express 1M2 / DGX Spark profile
+VID=1e91
+PID=de79
+WANT_SPEED=20000
+WANT_RX_LANES=2
+WANT_TX_LANES=2
+FS_UUID=6952-8360
+MIN_MBPS=200
+BENCH_MIB=512
+
+# All currently active direct and bind mounts backed by FS_UUID are discovered
+# automatically. No mount paths or systemd unit names need to be listed here.
+REQUIRED_PATHS="/mnt/external/comfyui/models /mnt/external/comfyui/output-sidecar"
+REQUIRED_MOUNT_TARGETS="/home/dan/ComfyUI/models"
+
+# Prevent an idle automount from later removing persistent dependent binds.
+PIN_AUTOMOUNTS_WITH_BINDS=1
+
+COMFYUI_USER=dan
+COMFYUI_CONTROL=/home/dan/code/spark-comfyui-sidecar/sidecar.sh
+COMFYUI_CONTAINER=spark-comfyui-sidecar
+COMFYUI_HEALTH_URL=http://127.0.0.1:8190/system_stats

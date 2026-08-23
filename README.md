@@ -98,7 +98,91 @@ Command-set documentation: [cyrozap/usb-to-pcie-re](https://github.com/cyrozap/u
 (ASM2x6x notes). Reset opcode confirmed from
 [tinygrad/asm2464pd-firmware](https://github.com/tinygrad/asm2464pd-firmware) `flash.py`.
 
-## Install
+## Chargeuk fork: OWC Express 1M2 on DGX Spark
+
+This fork includes a ready-to-review profile for this Spark installation:
+
+- enclosure: OWC Express 1M2 (`1e91:de79`), ASM2464PD
+- external filesystem UUID: `6952-8360`
+- mounts: discovered dynamically from filesystem UUID `6952-8360` (currently
+  `/mnt/external` and `/home/dan/ComfyUI/models`)
+- ComfyUI: persistent `spark-comfyui-sidecar` controlled by
+  `/home/dan/code/spark-comfyui-sidecar/sidecar.sh`
+
+The recovery is deliberately fail-closed. It verifies that the configured UUID
+belongs to the configured USB enclosure, stops ComfyUI, discovers and cleanly
+stops every active direct or bind mount backed by that filesystem, sends only
+the self-recovering `E8 50` command, rediscovers the disk by
+UUID, checks the 20 Gbps two-lane link, performs a direct-read benchmark,
+restores the captured mount state, and waits for the ComfyUI API to become
+healthy. If a step fails, it attempts to restore the mounts and ComfyUI state.
+
+New mounts do not need to be added to the script or configuration. A future
+fstab/systemd mount or bind mount sourced from this filesystem is detected on
+each run. Active manual mounts are also captured and reconstructed. Mount paths
+containing whitespace are intentionally unsupported so discovery cannot parse
+them ambiguously.
+
+Application-critical mounts may be listed in `REQUIRED_MOUNT_TARGETS`; these
+are guards, not the discovery list. The Spark profile requires the ComfyUI
+models bind mount to be active before reset. When an idle automount is the base
+for persistent bind mounts, the script pins the restored base mount for the
+rest of the boot by stopping the automount trigger and explicitly restarting
+the base mount, so systemd's idle timer cannot silently remove those binds.
+
+The script never force-unmounts. If a desktop application, shell, Samba client,
+or other process has an open file on the disk, recovery aborts, prints the
+holders reported by `fuser`, and restores ComfyUI and any partially stopped
+mounts. Close the listed application or file and rerun the recovery.
+
+Safe inspection commands make no changes:
+
+```bash
+./usb-reset.sh --check
+./usb-reset.sh --dry-run
+```
+
+`--check` exits non-zero when the link is degraded, which makes it useful in
+monitoring. The guarded live recovery requires root:
+
+```bash
+sudo ./usb-reset.sh --recover
+```
+
+### Install on the Spark
+
+Review `asm2464pd-soft-replug.conf.example`, then run:
+
+```bash
+sudo ./install.sh
+sudo /usr/local/bin/usb-reset.sh --dry-run
+sudo systemctl start usb-gen2x2-fix.service
+```
+
+The installer preserves an existing `/etc/default/asm2464pd-soft-replug`
+configuration. Mount paths are not configured there; the UUID is the mount
+discovery anchor. The installer enables the one-shot boot recovery and hourly link monitor;
+the recovery service first checks the live link and exits without interruption
+when it is already healthy.
+
+### Tests
+
+```bash
+bash -n usb-reset.sh usb-link-check.sh install.sh tests/test-usb-reset.sh
+bash tests/test-usb-reset.sh
+```
+
+### Live validation
+
+Validated on the configured DGX Spark on 2026-08-23:
+
+- initial link: USB 2.0, `480M`, one receive/transmit lane
+- after `E8 50`: USB 3.2 Gen 2x2, `20000M`, two receive/transmit lanes
+- direct 1 GiB read through the ComfyUI models bind: **1.8 GB/s**
+- `/mnt/external`, the dynamically discovered models bind, and the ComfyUI
+  health endpoint remained active beyond the former 60-second automount timeout
+
+## Generic upstream install
 
 ```bash
 sudo install -m755 usb-reset.sh /usr/local/bin/
@@ -107,8 +191,8 @@ sudo systemctl daemon-reload
 sudo systemctl enable usb-gen2x2-fix.service
 ```
 
-Edit the variables at the top of `usb-reset.sh` first (`VID`/`PID`, mount
-point, expected speed). At boot the unit checks the link and, only if degraded:
+For a different enclosure or host, copy and edit
+`asm2464pd-soft-replug.conf.example`. At boot the unit checks the link and, only if degraded:
 unmounts cleanly → sends the CPU reset → waits for re-enumeration → **verifies
 by measured throughput, not exit code** → remounts. Healthy or absent device →
 exits 0 untouched. If the reset ever fails, the unit exits non-zero and leaves
@@ -141,9 +225,11 @@ that writes a loud MOTD warning if the disk is ever found on a degraded link.
 | File | Purpose |
 |---|---|
 | `usb-reset.sh` | Detect degraded link → vendor CPU reset → verify → remount |
+| `asm2464pd-soft-replug.conf.example` | OWC Express 1M2 / DGX Spark profile |
+| `install.sh` | Install scripts, profile, service and monitor |
 | `usb-gen2x2-fix.service` | Runs the above once per boot |
 | `usb-link-check.sh` + `.service`/`.timer` | Optional degraded-link monitor (MOTD + journal) |
-| `FINDINGS.md` | Full investigation record: every mechanism tried, with measurements |
+| `tests/test-usb-reset.sh` | Fixture tests for safe device-node resolution |
 
 ## Credits
 

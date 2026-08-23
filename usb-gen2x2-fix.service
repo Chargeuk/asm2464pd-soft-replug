@@ -1,17 +1,13 @@
 [Unit]
-Description=Recover USB enclosure from boot-time USB 2.0 fallback (ASM2464PD MCU reset)
-# run after the fstab mount of /mnt/usb2t has been attempted, so the unmount
-# inside the script races nothing
-After=multi-user.target mnt-usb2t.mount
-Wants=mnt-usb2t.mount
+Description=Recover ASM2464PD enclosure from boot-time USB 2.0 fallback
+After=multi-user.target docker.service
+Wants=docker.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/bin/usb-reset.sh
+ExecStart=/usr/local/bin/usb-reset.sh --recover
 User=root
-# script exits 0 when already healthy or absent; nonzero only when the reset
-# genuinely failed and a physical replug is needed
-TimeoutStartSec=120
+TimeoutStartSec=300
 
 [Install]
 WantedBy=multi-user.target

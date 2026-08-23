@@ -1,30 +1,27 @@
 #!/usr/bin/env bash
-# usb-link-check.sh - detect an ASM2464PD enclosure running at a degraded
-# link and make that LOUD. Run at boot and hourly.
-#
-# Part of asm2464pd-soft-replug. Copyright (C) 2026 J&S Consultancy.
+# Monitor the configured ASM2464PD enclosure's negotiated USB link.
 # SPDX-License-Identifier: GPL-3.0-only
-#
-# Why this exists: on 2026-08-13 the disk was found to have been running at USB 2.0
-# (41 MB/s instead of ~2 GB/s) since 2026-08-08, across three reboots, silently.
-# The link only trains Gen 2x2 when the device attaches AFTER Linux is up, so every
-# boot with the drive attached comes up degraded. See FINDINGS.md.
-#
-# Exit: 0 = healthy (or absent), 1 = degraded.
 
 set -uo pipefail
 
-VID=2d01 PID=3666
-WANT_SPEED=20000
-MOTD=/etc/motd.d/99-usb-link
-STAMP=/var/lib/misc/usb-link-check.state
+CONFIG_FILE="${CONFIG_FILE:-/etc/default/asm2464pd-soft-replug}"
+[[ -r "$CONFIG_FILE" ]] && source "$CONFIG_FILE"
+VID="${VID:-1e91}"
+PID="${PID:-de79}"
+WANT_SPEED="${WANT_SPEED:-20000}"
+WANT_RX_LANES="${WANT_RX_LANES:-2}"
+WANT_TX_LANES="${WANT_TX_LANES:-2}"
+MOTD="${MOTD:-/etc/motd.d/99-usb-link}"
+STAMP="${STAMP:-/var/lib/misc/usb-link-check.state}"
+SYSFS_ROOT="${SYSFS_ROOT:-/sys}"
 
 find_dev() {
     local d
-    for d in /sys/bus/usb/devices/*-*; do
+    for d in "$SYSFS_ROOT"/bus/usb/devices/*-*; do
         [[ -f "$d/idVendor" && -f "$d/idProduct" ]] || continue
         [[ "$(<"$d/idVendor")" == "$VID" && "$(<"$d/idProduct")" == "$PID" ]] || continue
-        printf '%s' "$d"; return 0
+        printf '%s' "$d"
+        return 0
     done
     return 1
 }
@@ -39,28 +36,22 @@ speed=$(<"$dev/speed")
 rx=$(cat "$dev/rx_lanes" 2>/dev/null || echo '?')
 tx=$(cat "$dev/tx_lanes" 2>/dev/null || echo '?')
 
-if [[ "$speed" == "$WANT_SPEED" && "$rx" == 2 && "$tx" == 2 ]]; then
+if [[ "$speed" == "$WANT_SPEED" && "$rx" == "$WANT_RX_LANES" && "$tx" == "$WANT_TX_LANES" ]]; then
     logger -t usb-link-check "OK: ${speed}M ${rx}/${tx} lanes"
     rm -f "$MOTD" 2>/dev/null
-    printf 'ok %s\n' "$speed" > "$STAMP" 2>/dev/null
+    printf 'ok %s %s %s\n' "$speed" "$rx" "$tx" > "$STAMP" 2>/dev/null
     exit 0
 fi
 
-# --- degraded ---------------------------------------------------------------
-logger -p user.warning -t usb-link-check \
-    "DEGRADED: /mnt/usb2t link is ${speed}M (${rx}/${tx} lanes), expected ${WANT_SPEED}M 2/2 - replug required"
-
+message="OWC Express 1M2 is degraded: ${speed}M (${rx}/${tx} lanes), expected ${WANT_SPEED}M ${WANT_RX_LANES}/${WANT_TX_LANES}"
+logger -p user.warning -t usb-link-check "$message"
 mkdir -p "$(dirname "$MOTD")" 2>/dev/null
 cat > "$MOTD" <<EOF
 
-  ##  USB DISK DEGRADED  ##
-  /mnt/usb2t is linked at ${speed}M (${rx}/${tx} lanes), not ${WANT_SPEED}M 2/2.
-  That is ~41 MB/s instead of ~2 GB/s.
-
-  Cause: the enclosure was attached during boot. It only trains Gen 2x2 when it
-  attaches AFTER Linux is up. Physically replug it, then run:  usb-reset.sh
-  Details: FINDINGS.md
+  ## USB DISK DEGRADED ##
+  $message
+  Run: sudo usb-reset.sh --recover
 
 EOF
-printf 'degraded %s\n' "$speed" > "$STAMP" 2>/dev/null
+printf 'degraded %s %s %s\n' "$speed" "$rx" "$tx" > "$STAMP" 2>/dev/null
 exit 1
