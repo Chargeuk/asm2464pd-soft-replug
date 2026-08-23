@@ -156,20 +156,23 @@ Review `asm2464pd-soft-replug.conf.example`, then run:
 ```bash
 sudo ./install.sh
 sudo /usr/local/bin/usb-reset.sh --dry-run
-sudo systemctl start usb-gen2x2-fix.service
+systemctl list-timers usb-gen2x2-fix.timer
 ```
 
 The installer preserves an existing `/etc/default/asm2464pd-soft-replug`
 configuration. Mount paths are not configured there; the UUID is the mount
-discovery anchor. The installer enables the one-shot boot recovery and hourly link monitor;
-the recovery service first checks the live link and exits without interruption
-when it is already healthy.
+discovery anchor. The installer enables a timer that runs the one-shot recovery
+45 seconds after each boot, plus the hourly link monitor. The recovery service
+first checks the live link; an already healthy drive is not reset, but its base
+mount is still pinned when persistent bind mounts depend on it. An absent drive
+is skipped without failing the boot unit.
 
 ### Tests
 
 ```bash
-bash -n usb-reset.sh usb-link-check.sh install.sh tests/test-usb-reset.sh
+bash -n usb-reset.sh usb-link-check.sh install.sh tests/*.sh
 bash tests/test-usb-reset.sh
+bash tests/test-systemd-units.sh
 ```
 
 ### Live validation
@@ -187,8 +190,9 @@ Validated on the configured DGX Spark on 2026-08-23:
 ```bash
 sudo install -m755 usb-reset.sh /usr/local/bin/
 sudo install -m644 usb-gen2x2-fix.service /etc/systemd/system/
+sudo install -m644 usb-gen2x2-fix.timer /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable usb-gen2x2-fix.service
+sudo systemctl enable usb-gen2x2-fix.timer
 ```
 
 For a different enclosure or host, copy and edit
@@ -227,9 +231,11 @@ that writes a loud MOTD warning if the disk is ever found on a degraded link.
 | `usb-reset.sh` | Detect degraded link → vendor CPU reset → verify → remount |
 | `asm2464pd-soft-replug.conf.example` | OWC Express 1M2 / DGX Spark profile |
 | `install.sh` | Install scripts, profile, service and monitor |
-| `usb-gen2x2-fix.service` | Runs the above once per boot |
+| `usb-gen2x2-fix.service` | One-shot guarded recovery operation |
+| `usb-gen2x2-fix.timer` | Starts recovery 45 seconds after boot |
 | `usb-link-check.sh` + `.service`/`.timer` | Optional degraded-link monitor (MOTD + journal) |
 | `tests/test-usb-reset.sh` | Fixture tests for safe device-node resolution |
+| `tests/test-systemd-units.sh` | Checks delayed timer/service installation |
 
 ## Credits
 

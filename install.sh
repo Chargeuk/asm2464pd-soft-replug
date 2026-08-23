@@ -15,6 +15,7 @@ command -v sg_raw >/dev/null 2>&1 || {
 install -m 0755 "$base_dir/usb-reset.sh" /usr/local/bin/usb-reset.sh
 install -m 0755 "$base_dir/usb-link-check.sh" /usr/local/bin/usb-link-check.sh
 install -m 0644 "$base_dir/usb-gen2x2-fix.service" /etc/systemd/system/usb-gen2x2-fix.service
+install -m 0644 "$base_dir/usb-gen2x2-fix.timer" /etc/systemd/system/usb-gen2x2-fix.timer
 install -m 0644 "$base_dir/usb-link-check.service" /etc/systemd/system/usb-link-check.service
 install -m 0644 "$base_dir/usb-link-check.timer" /etc/systemd/system/usb-link-check.timer
 
@@ -26,5 +27,7 @@ else
 fi
 
 systemctl daemon-reload
-systemctl enable usb-gen2x2-fix.service usb-link-check.timer
-echo "Installed and enabled. Run 'usb-reset.sh --dry-run' before the first recovery."
+systemctl disable usb-gen2x2-fix.service >/dev/null 2>&1 || true
+systemctl enable usb-gen2x2-fix.timer usb-link-check.timer
+echo "Installed and enabled for 45 seconds after each boot."
+echo "Run 'usb-reset.sh --dry-run' before the first recovery."

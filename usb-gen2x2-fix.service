@@ -1,6 +1,6 @@
 [Unit]
 Description=Recover ASM2464PD enclosure from boot-time USB 2.0 fallback
-After=multi-user.target docker.service
+After=local-fs.target docker.service
 Wants=docker.service
 
 [Service]
@@ -8,6 +8,3 @@ Type=oneshot
 ExecStart=/usr/local/bin/usb-reset.sh --recover
 User=root
 TimeoutStartSec=300
-
-[Install]
-WantedBy=multi-user.target

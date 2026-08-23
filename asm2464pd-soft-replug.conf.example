@@ -16,6 +16,9 @@ REQUIRED_MOUNT_TARGETS="/home/dan/ComfyUI/models"
 # Prevent an idle automount from later removing persistent dependent binds.
 PIN_AUTOMOUNTS_WITH_BINDS=1
 
+# A disconnected enclosure should not make the delayed boot unit fail.
+ABSENT_IS_OK=1
+
 COMFYUI_USER=dan
 COMFYUI_CONTROL=/home/dan/code/spark-comfyui-sidecar/sidecar.sh
 COMFYUI_CONTAINER=spark-comfyui-sidecar

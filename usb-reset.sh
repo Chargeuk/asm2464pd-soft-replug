@@ -19,6 +19,7 @@ BENCH_MIB="${BENCH_MIB:-512}"
 REQUIRED_PATHS="${REQUIRED_PATHS:-/mnt/external/comfyui/models /mnt/external/comfyui/output-sidecar}"
 REQUIRED_MOUNT_TARGETS="${REQUIRED_MOUNT_TARGETS:-/home/dan/ComfyUI/models}"
 PIN_AUTOMOUNTS_WITH_BINDS="${PIN_AUTOMOUNTS_WITH_BINDS:-1}"
+ABSENT_IS_OK="${ABSENT_IS_OK:-1}"
 COMFYUI_USER="${COMFYUI_USER:-dan}"
 COMFYUI_CONTROL="${COMFYUI_CONTROL:-/home/dan/code/spark-comfyui-sidecar/sidecar.sh}"
 COMFYUI_CONTAINER="${COMFYUI_CONTAINER:-spark-comfyui-sidecar}"
@@ -301,6 +302,12 @@ start_storage() {
     for required in $REQUIRED_PATHS; do
         [[ -d "$required" ]] || die "required path is missing after remount: $required"
     done
+    pin_automounts_with_binds "$partition"
+    STORAGE_STOPPED=0
+}
+
+pin_automounts_with_binds() {
+    local partition="$1" i
     # An idle automount can tear down dependent bind mounts after its timeout.
     # Leave the base filesystem mounted, but stop its trigger for this boot.
     if [[ "$PIN_AUTOMOUNTS_WITH_BINDS" == 1 && "$HAS_BIND_MOUNTS" == 1 ]]; then
@@ -316,7 +323,7 @@ start_storage() {
             fi
         done
     fi
-    STORAGE_STOPPED=0
+    return 0
 }
 
 start_comfyui() {
@@ -372,7 +379,14 @@ main() {
     esac
 
     local dev speed rx tx sg partition newdev mbps attempt
-    dev=$(find_dev) || die "enclosure ${VID}:${PID} is not attached"
+    dev=$(find_dev || true)
+    if [[ -z "$dev" ]]; then
+        if [[ "$MODE" == recover && "$ABSENT_IS_OK" == 1 ]]; then
+            log "enclosure ${VID}:${PID} is not attached; skipping boot recovery"
+            return 0
+        fi
+        die "enclosure ${VID}:${PID} is not attached"
+    fi
     partition=$(partition_path) || die "filesystem UUID $FS_UUID is not present"
     verify_partition_belongs_to_enclosure "$dev" "$partition"
     capture_mount_state "$partition"
@@ -388,7 +402,10 @@ main() {
     [[ -e "$sg" ]] || die "resolved SCSI-generic node does not exist: $sg"
 
     if [[ "$speed" == "$WANT_SPEED" && "$rx" == "$WANT_RX_LANES" && "$tx" == "$WANT_TX_LANES" ]]; then
-        log "already at ${WANT_SPEED}M with ${rx}/${tx} lanes; nothing to do"
+        log "already at ${WANT_SPEED}M with ${rx}/${tx} lanes; no reset needed"
+        if [[ "$MODE" == recover && $EUID -eq 0 ]]; then
+            pin_automounts_with_binds "$partition"
+        fi
         return
     fi
 

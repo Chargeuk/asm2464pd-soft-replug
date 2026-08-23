@@ -1,0 +1,10 @@
+[Unit]
+Description=Run ASM2464PD recovery after boot-time storage settles
+
+[Timer]
+OnBootSec=45s
+AccuracySec=5s
+Unit=usb-gen2x2-fix.service
+
+[Install]
+WantedBy=timers.target
